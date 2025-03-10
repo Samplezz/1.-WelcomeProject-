@@ -423,7 +423,7 @@ if 'current_page' not in st.session_state:
     st.session_state.current_page = "home"
 
 # Admin password (change this in a real app)
-ADMIN_PASSWORD = "admin123"
+ADMIN_PASSWORD = "LouayX2006@"
 
 # Main header
 st.markdown('<div class="main-header"><h1>Student Resource Hub</h1><p>Access past exams, study sheets, and request missing resources</p></div>', unsafe_allow_html=True)
