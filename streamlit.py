@@ -2,10 +2,14 @@ import streamlit as st
 import pandas as pd
 import os
 import json
+import base64
 from datetime import datetime
 from pathlib import Path
 import plotly.express as px
 import plotly.graph_objects as go
+from PIL import Image
+import io
+import shutil
 
 # Page configuration
 st.set_page_config(
@@ -14,6 +18,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# Ensure we're binding to all interfaces for deployment
+os.environ['STREAMLIT_SERVER_ADDRESS'] = '0.0.0.0'
+os.environ['STREAMLIT_SERVER_PORT'] = '5000'
 
 # Constants
 STATUS_PENDING = "Pending"
@@ -37,17 +45,136 @@ RESOURCE_TYPES = [
 
 # Default settings
 DEFAULT_SETTINGS = {
-    "universities": ["Example University"],
-    "semesters": {"Example University": ["Semester 1", "Semester 2"]},
-    "courses": {"Example University_Semester 1": ["Introduction to Computer Science", "Calculus I"]}
+    "universities": ["MIT", "Stanford", "Harvard"],
+    "semesters": {
+        "MIT": ["Fall 2023", "Spring 2024"],
+        "Stanford": ["Fall 2023", "Winter 2024", "Spring 2024"],
+        "Harvard": ["Fall 2023", "Spring 2024"]
+    },
+    "courses": {
+        "MIT_Fall 2023": ["Computer Science 101", "Physics 201", "Calculus I"],
+        "MIT_Spring 2024": ["Computer Science 102", "Physics 202", "Calculus II"],
+        "Stanford_Fall 2023": ["Introduction to AI", "Data Structures", "Machine Learning Basics"],
+        "Stanford_Winter 2024": ["Advanced AI", "Algorithms", "Natural Language Processing"],
+        "Stanford_Spring 2024": ["Robotics", "Computer Vision", "Deep Learning"],
+        "Harvard_Fall 2023": ["Introduction to Programming", "Principles of Economics", "Statistics"],
+        "Harvard_Spring 2024": ["Advanced Programming", "Microeconomics", "Data Science"]
+    }
 }
+
+# Custom CSS for better UI
+st.markdown("""
+<style>
+    .main-header {
+        text-align: center;
+        padding: 1rem 0;
+        border-bottom: 1px solid #444;
+        margin-bottom: 2rem;
+    }
+    .resource-section {
+        background-color: #2D2D2D;
+        padding: 1.5rem;
+        border-radius: 5px;
+        margin-bottom: 1.5rem;
+    }
+    .resource-header {
+        border-bottom: 2px solid #FF5252;
+        padding-bottom: 0.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .find-resources-btn {
+        background-color: #FF5252;
+        color: white;
+        border: none;
+        padding: 0.5rem 1.5rem;
+        border-radius: 4px;
+        cursor: pointer;
+        text-align: center;
+        display: block;
+        margin: 1rem auto;
+        font-weight: bold;
+    }
+    .tab-container {
+        margin-top: 2rem;
+    }
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 2rem;
+    }
+    .stTabs [data-baseweb="tab"] {
+        height: 50px;
+        white-space: pre-wrap;
+        border-radius: 4px 4px 0 0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #FF5252 !important;
+        color: white !important;
+    }
+    .download-btn {
+        background-color: #FF5252;
+        color: white;
+        text-decoration: none;
+        padding: 0.3rem 0.7rem;
+        border-radius: 4px;
+        display: inline-block;
+        margin-top: 0.5rem;
+        font-size: 0.9rem;
+        text-align: center;
+    }
+    .file-card {
+        background-color: #2D2D2D;
+        border-radius: 5px;
+        padding: 0.8rem;
+        margin: 0.5rem;
+        display: inline-block;
+        width: 150px;
+        vertical-align: top;
+    }
+    .file-name {
+        font-size: 0.9rem;
+        margin-top: 0.5rem;
+        margin-bottom: 0.5rem;
+        word-wrap: break-word;
+        text-align: center;
+    }
+    .file-container {
+        display: flex;
+        flex-wrap: wrap;
+    }
+    .thumbnail-container {
+        height: 100px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .file-icon {
+        font-size: 3rem;
+        text-align: center;
+    }
+    .sidebar-content {
+        background-color: #2D2D2D;
+        padding: 1rem;
+        border-radius: 5px;
+    }
+    .admin-btn {
+        background-color: #333;
+        border: 1px solid #FF5252;
+        color: white;
+        text-align: center;
+        padding: 0.5rem;
+        border-radius: 4px;
+        margin-top: 1rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 # Utility functions
 def create_directory_if_not_exists(directory_path):
+    """Create a directory if it doesn't exist"""
     if not os.path.exists(directory_path):
         os.makedirs(directory_path)
 
 def load_settings():
+    """Load settings from the settings.json file"""
     settings_path = Path("data/settings.json")
     
     if not settings_path.exists():
@@ -64,6 +191,7 @@ def load_settings():
         return DEFAULT_SETTINGS
 
 def save_settings(settings):
+    """Save settings to the settings.json file"""
     settings_path = Path("data/settings.json")
     
     try:
@@ -77,12 +205,31 @@ def save_settings(settings):
         st.error(f"Error saving settings: {e}")
         return False
 
+def get_file_path(university, semester, course):
+    """Generate a file path for a given university, semester, and course"""
+    base_path = Path("data/uploads")
+    return base_path / university / semester / course
+
 def format_datetime(iso_datetime):
+    """Format ISO datetime string to readable format"""
     try:
         dt = datetime.fromisoformat(iso_datetime)
         return dt.strftime("%Y-%m-%d %H:%M")
     except:
         return iso_datetime
+
+def file_download_link(file_path, file_name):
+    """Generate a download link for a file"""
+    with open(file_path, "rb") as f:
+        data = f.read()
+    b64 = base64.b64encode(data).decode()
+    file_size = os.path.getsize(file_path) / 1024  # Size in KB
+    short_name = file_name
+    if len(short_name) > 20:
+        # Truncate name if too long (for display)
+        name_parts = os.path.splitext(file_name)
+        short_name = name_parts[0][:17] + "..." + name_parts[1]
+    return f'<a href="data:application/octet-stream;base64,{b64}" download="{file_name}" class="download-btn">Download ({file_size:.1f} KB)</a>'
 
 # Resource Request class
 class ResourceRequest:
@@ -154,6 +301,7 @@ class ResourceRequest:
         )
 
 def load_requests():
+    """Load resource requests from JSON file"""
     requests_path = Path("data/requests.json")
     
     if not requests_path.exists():
@@ -168,6 +316,7 @@ def load_requests():
         return []
 
 def save_requests(requests):
+    """Save resource requests to JSON file"""
     requests_path = Path("data/requests.json")
     
     try:
@@ -184,11 +333,13 @@ def save_requests(requests):
         return False
 
 def add_request(request):
+    """Add a new resource request"""
     requests = load_requests()
     requests.append(request)
     return save_requests(requests)
 
 def update_request(request_id, updates):
+    """Update an existing resource request"""
     requests = load_requests()
     for req in requests:
         if req.request_id == request_id:
@@ -199,6 +350,7 @@ def update_request(request_id, updates):
     return False
 
 def delete_request(request_id):
+    """Delete a resource request"""
     requests = load_requests()
     initial_count = len(requests)
     requests = [req for req in requests if req.request_id != request_id]
@@ -208,6 +360,7 @@ def delete_request(request_id):
     return False
 
 def get_request_stats():
+    """Get statistics about resource requests"""
     requests = load_requests()
     
     if not requests:
@@ -251,44 +404,355 @@ def get_request_stats():
     
     return stats
 
+# Create required directories
+data_dir = Path("data")
+uploads_dir = data_dir / "uploads"
+create_directory_if_not_exists(data_dir)
+create_directory_if_not_exists(uploads_dir)
+
 # Initialize session state
 if 'settings' not in st.session_state:
     st.session_state.settings = load_settings()
-if 'admin_authenticated' not in st.session_state:
-    st.session_state.admin_authenticated = False
+if 'is_admin' not in st.session_state:
+    st.session_state.is_admin = False
+if 'show_login' not in st.session_state:
+    st.session_state.show_login = False
+if 'logged_in_email' not in st.session_state:
+    st.session_state.logged_in_email = None
+if 'current_page' not in st.session_state:
+    st.session_state.current_page = "home"
 
-# Admin password (in a real app, this would be more secure)
+# Admin password (change this in a real app)
 ADMIN_PASSWORD = "admin123"
 
-# Sidebar
-st.sidebar.title("Student Resource Hub")
+# Main header
+st.markdown('<div class="main-header"><h1>Student Resource Hub</h1><p>Access past exams, study sheets, and request missing resources</p></div>', unsafe_allow_html=True)
 
-# Admin login section
-with st.sidebar.expander("Admin Login"):
-    password = st.text_input("Password", type="password")
-    if st.button("Login"):
-        if password == ADMIN_PASSWORD:
-            st.session_state.admin_authenticated = True
-            st.success("Login successful!")
-        else:
-            st.error("Incorrect password")
-
-# Navigation
-if st.session_state.admin_authenticated:
-    st.sidebar.subheader("Admin Navigation")
-    admin_option = st.sidebar.radio(
+# Sidebar content
+with st.sidebar:
+    # Logo and title
+    st.image("https://via.placeholder.com/150x150.png?text=SRH", width=150)
+    st.markdown('<h2>StudyHub</h2>', unsafe_allow_html=True)
+    
+    # Navigation
+    st.subheader("Navigation")
+    nav_option = st.radio(
         "Select Option",
-        ["Manage Requests", "Request Analytics", "Settings"]
+        ["Home", "Find Resources", "Request Resources", "My Requests", "Admin Portal"]
     )
-else:
-    st.sidebar.subheader("Navigation")
-    user_option = st.sidebar.radio(
-        "Select Option",
-        ["Submit Resource Request", "My Requests"]
-    )
+    
+    # Update current page based on navigation
+    if nav_option == "Home":
+        st.session_state.current_page = "home"
+    elif nav_option == "Find Resources":
+        st.session_state.current_page = "find_resources"
+    elif nav_option == "Request Resources":
+        st.session_state.current_page = "request_resources"
+    elif nav_option == "My Requests":
+        st.session_state.current_page = "my_requests"
+    elif nav_option == "Admin Portal":
+        if not st.session_state.is_admin:
+            st.session_state.show_login = True
+        st.session_state.current_page = "admin_portal"
+    
+    # Admin Login/Logout
+    if st.session_state.is_admin:
+        if st.button("Logout"):
+            st.session_state.is_admin = False
+            st.session_state.current_page = "home"
+            st.rerun()
 
-# Main content
-st.title("Student Resource Hub")
+# Admin Login Modal
+if st.session_state.get('show_login', False) and not st.session_state.is_admin:
+    with st.form("login_form"):
+        st.subheader("Admin Login")
+        admin_password = st.text_input("Password", type="password")
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            submitted = st.form_submit_button("Login")
+        with col2:
+            cancel = st.form_submit_button("Cancel")
+        
+        if submitted:
+            if admin_password == ADMIN_PASSWORD:
+                st.session_state.is_admin = True
+                st.session_state.show_login = False
+                st.success("Logged in as admin!")
+                st.rerun()
+            else:
+                st.error("Incorrect password!")
+        
+        if cancel:
+            st.session_state.show_login = False
+            st.rerun()
+
+# Function to display resource listing
+def show_resources():
+    st.markdown('<div class="resource-section"><h2 class="resource-header">Find Study Resources</h2>', unsafe_allow_html=True)
+    
+    # Create three columns for university, semester, and course selection
+    col1, col2, col3 = st.columns(3)
+    
+    settings = st.session_state.settings
+    
+    # University selection
+    universities = settings.get("universities", [])
+    if not universities:
+        st.warning("No universities available. Admin needs to add universities.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    with col1:
+        st.markdown("<p>Select University</p>", unsafe_allow_html=True)
+        selected_uni = st.selectbox("University", universities, label_visibility="collapsed")
+    
+    # Semester selection
+    semesters = settings.get("semesters", {}).get(selected_uni, [])
+    if not semesters:
+        st.warning(f"No semesters available for {selected_uni}. Admin needs to add semesters.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    with col2:
+        st.markdown("<p>Select Semester</p>", unsafe_allow_html=True)
+        selected_semester = st.selectbox("Semester", semesters, label_visibility="collapsed")
+    
+    # Course selection
+    courses = settings.get("courses", {}).get(f"{selected_uni}_{selected_semester}", [])
+    if not courses:
+        st.warning(f"No courses available for {selected_uni}, {selected_semester}. Admin needs to add courses.")
+        st.markdown('</div>', unsafe_allow_html=True)
+        return
+    
+    with col3:
+        st.markdown("<p>Select Course</p>", unsafe_allow_html=True)
+        selected_course = st.selectbox("Course", courses, label_visibility="collapsed")
+    
+    # Find Resources button
+    btn_col1, btn_col2, btn_col3 = st.columns([2, 1, 2])
+    with btn_col2:
+        find_resources = st.button("Find Resources", type="primary")
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    # Display resources if all selections are made
+    if selected_uni and selected_semester and selected_course:
+        st.markdown(f"<div class='resource-section'><h2>Resources for {selected_course}</h2>", unsafe_allow_html=True)
+        
+        # Create tabs container with custom CSS
+        st.markdown('<div class="tab-container">', unsafe_allow_html=True)
+        
+        # Define tabs for different resource types
+        tab1, tab2, tab3 = st.tabs(["Past Exams", "Study Sheets", "Tips & Guides"])
+        
+        # Generate file path for resources
+        resource_path = get_file_path(selected_uni, selected_semester, selected_course)
+        create_directory_if_not_exists(resource_path)
+        
+        # Display files
+        with tab1:
+            exam_path = resource_path / "exams"
+            create_directory_if_not_exists(exam_path)
+            
+            exams = os.listdir(exam_path) if os.path.exists(exam_path) else []
+            if exams:
+                # Start file container
+                st.markdown('<div class="file-container">', unsafe_allow_html=True)
+                
+                for exam in exams:
+                    file_path = exam_path / exam
+                    file_date = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+                    
+                    # Create a file card with HTML for better layout control
+                    file_html = '<div class="file-card">'
+                    
+                    # Add thumbnail container
+                    file_html += '<div class="thumbnail-container">'
+                    if exam.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                        # For images, convert to base64 to embed directly in HTML
+                        with open(file_path, "rb") as f:
+                            img_data = base64.b64encode(f.read()).decode()
+                        file_html += f'<img src="data:image/png;base64,{img_data}" style="max-width:100%; max-height:100px;" />'
+                    elif exam.lower().endswith(('.pdf')):
+                        # For PDFs, show a PDF icon
+                        file_html += '<div class="file-icon">📄</div>'
+                    else:
+                        # For other files show a generic file icon
+                        file_html += '<div class="file-icon">📁</div>'
+                    file_html += '</div>'
+                    
+                    # Add file name (shortened if needed)
+                    short_name = exam
+                    if len(short_name) > 20:
+                        name_parts = os.path.splitext(exam)
+                        short_name = name_parts[0][:17] + "..." + name_parts[1]
+                    file_html += f'<div class="file-name">{short_name}</div>'
+                    
+                    # Add download button
+                    download_link = file_download_link(file_path, exam)
+                    file_html += download_link
+                    
+                    # Add upload date
+                    file_html += f'<div style="font-size:0.8rem; text-align:center; margin-top:0.5rem;">Uploaded: {file_date}</div>'
+                    
+                    # Close file card
+                    file_html += '</div>'
+                    
+                    # Output the HTML
+                    st.markdown(file_html, unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("No exams have been uploaded for this course yet.")
+                
+                # If admin is viewing, show upload option
+                if st.session_state.is_admin:
+                    st.write("As an admin, you can upload exam files:")
+                    uploaded_file = st.file_uploader("Upload an exam", key="exam_uploader")
+                    
+                    if uploaded_file:
+                        # Save the uploaded file
+                        file_path = exam_path / uploaded_file.name
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        st.success(f"Uploaded {uploaded_file.name} successfully!")
+                        st.rerun()
+        
+        with tab2:
+            study_path = resource_path / "study_sheets"
+            create_directory_if_not_exists(study_path)
+            
+            study_sheets = os.listdir(study_path) if os.path.exists(study_path) else []
+            if study_sheets:
+                # Start file container
+                st.markdown('<div class="file-container">', unsafe_allow_html=True)
+                
+                for sheet in study_sheets:
+                    file_path = study_path / sheet
+                    file_date = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+                    
+                    # Create a file card with HTML for better layout control
+                    file_html = '<div class="file-card">'
+                    
+                    # Add thumbnail container
+                    file_html += '<div class="thumbnail-container">'
+                    if sheet.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                        # For images, convert to base64 to embed directly in HTML
+                        with open(file_path, "rb") as f:
+                            img_data = base64.b64encode(f.read()).decode()
+                        file_html += f'<img src="data:image/png;base64,{img_data}" style="max-width:100%; max-height:100px;" />'
+                    elif sheet.lower().endswith(('.pdf')):
+                        # For PDFs, show a PDF icon
+                        file_html += '<div class="file-icon">📄</div>'
+                    else:
+                        # For other files show a generic file icon
+                        file_html += '<div class="file-icon">📁</div>'
+                    file_html += '</div>'
+                    
+                    # Add file name (shortened if needed)
+                    short_name = sheet
+                    if len(short_name) > 20:
+                        name_parts = os.path.splitext(sheet)
+                        short_name = name_parts[0][:17] + "..." + name_parts[1]
+                    file_html += f'<div class="file-name">{short_name}</div>'
+                    
+                    # Add download button
+                    download_link = file_download_link(file_path, sheet)
+                    file_html += download_link
+                    
+                    # Add upload date
+                    file_html += f'<div style="font-size:0.8rem; text-align:center; margin-top:0.5rem;">Uploaded: {file_date}</div>'
+                    
+                    # Close file card
+                    file_html += '</div>'
+                    
+                    # Output the HTML
+                    st.markdown(file_html, unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("No study sheets have been uploaded for this course yet.")
+                
+                # If admin is viewing, show upload option
+                if st.session_state.is_admin:
+                    st.write("As an admin, you can upload study sheets:")
+                    uploaded_file = st.file_uploader("Upload a study sheet", key="sheet_uploader")
+                    
+                    if uploaded_file:
+                        # Save the uploaded file
+                        file_path = study_path / uploaded_file.name
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        st.success(f"Uploaded {uploaded_file.name} successfully!")
+                        st.rerun()
+        
+        with tab3:
+            tips_path = resource_path / "tips_guides"
+            create_directory_if_not_exists(tips_path)
+            
+            tips = os.listdir(tips_path) if os.path.exists(tips_path) else []
+            if tips:
+                # Start file container
+                st.markdown('<div class="file-container">', unsafe_allow_html=True)
+                
+                for tip in tips:
+                    file_path = tips_path / tip
+                    file_date = datetime.fromtimestamp(os.path.getmtime(file_path)).strftime('%Y-%m-%d')
+                    
+                    # Create a file card with HTML for better layout control
+                    file_html = '<div class="file-card">'
+                    
+                    # Add thumbnail container
+                    file_html += '<div class="thumbnail-container">'
+                    if tip.lower().endswith(('.png', '.jpg', '.jpeg', '.gif', '.bmp')):
+                        # For images, convert to base64 to embed directly in HTML
+                        with open(file_path, "rb") as f:
+                            img_data = base64.b64encode(f.read()).decode()
+                        file_html += f'<img src="data:image/png;base64,{img_data}" style="max-width:100%; max-height:100px;" />'
+                    elif tip.lower().endswith(('.pdf')):
+                        # For PDFs, show a PDF icon
+                        file_html += '<div class="file-icon">📄</div>'
+                    else:
+                        # For other files show a generic file icon
+                        file_html += '<div class="file-icon">📁</div>'
+                    file_html += '</div>'
+                    
+                    # Add file name (shortened if needed)
+                    short_name = tip
+                    if len(short_name) > 20:
+                        name_parts = os.path.splitext(tip)
+                        short_name = name_parts[0][:17] + "..." + name_parts[1]
+                    file_html += f'<div class="file-name">{short_name}</div>'
+                    
+                    # Add download button
+                    download_link = file_download_link(file_path, tip)
+                    file_html += download_link
+                    
+                    # Add upload date
+                    file_html += f'<div style="font-size:0.8rem; text-align:center; margin-top:0.5rem;">Uploaded: {file_date}</div>'
+                    
+                    # Close file card
+                    file_html += '</div>'
+                    
+                    # Output the HTML
+                    st.markdown(file_html, unsafe_allow_html=True)
+                
+                st.markdown('</div>', unsafe_allow_html=True)
+            else:
+                st.info("No tips or guides have been uploaded for this course yet.")
+                
+                # If admin is viewing, show upload option
+                if st.session_state.is_admin:
+                    st.write("As an admin, you can upload tips and guides:")
+                    uploaded_file = st.file_uploader("Upload a tip or guide", key="tip_uploader")
+                    
+                    if uploaded_file:
+                        # Save the uploaded file
+                        file_path = tips_path / uploaded_file.name
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        st.success(f"Uploaded {uploaded_file.name} successfully!")
+                        st.rerun()
 
 # Show compact request form
 def show_request_form():
@@ -352,6 +816,10 @@ def show_request_form():
             if add_request(request):
                 st.success("Resource request submitted successfully!")
                 st.balloons()
+                
+                # Store the email for easy access to "My Requests"
+                if email and not anonymous:
+                    st.session_state.logged_in_email = email
             else:
                 st.error("Failed to submit request. Please try again later.")
 
@@ -359,11 +827,15 @@ def show_request_form():
 def show_my_requests():
     st.subheader("My Submitted Requests")
     
+    # If the user has already submitted an email in this session, pre-fill it
+    default_email = st.session_state.logged_in_email or ""
+    
     with st.form("find_requests_form"):
-        email = st.text_input("Enter your email to find your requests")
+        email = st.text_input("Enter your email to find your requests", value=default_email)
         submitted = st.form_submit_button("Find My Requests")
     
     if submitted and email:
+        st.session_state.logged_in_email = email
         requests = load_requests()
         user_requests = [req for req in requests if req.email == email and not req.anonymous]
         
@@ -404,6 +876,21 @@ def show_my_requests():
                     
                     if selected_request.admin_notes:
                         st.write(f"**Admin Notes:** {selected_request.admin_notes}")
+
+# Admin functions
+def admin_dashboard():
+    st.title("Admin Dashboard")
+    
+    admin_tabs = st.tabs(["Manage Requests", "Analytics", "Settings"])
+    
+    with admin_tabs[0]:
+        manage_requests()
+    
+    with admin_tabs[1]:
+        request_analytics()
+    
+    with admin_tabs[2]:
+        manage_settings()
 
 # Admin function to manage requests
 def manage_requests():
@@ -520,6 +1007,18 @@ def manage_requests():
                         height=100
                     )
                     
+                    # If this is a completed request, offer option to upload the requested resource
+                    upload_resource = False
+                    if new_status == STATUS_COMPLETED:
+                        upload_resource = st.checkbox("Upload the requested resource now")
+                        
+                        if upload_resource:
+                            uploaded_file = st.file_uploader("Upload resource file", key=f"resource_upload_{request_id}")
+                            resource_category = st.selectbox(
+                                "Resource Category", 
+                                ["exams", "study_sheets", "tips_guides"]
+                            )
+                    
                     col1, col2 = st.columns(2)
                     with col1:
                         update_submitted = st.form_submit_button("Update Request")
@@ -533,11 +1032,35 @@ def manage_requests():
                         "admin_notes": admin_notes
                     }
                     
-                    if update_request(request_id, updates):
+                    success = update_request(request_id, updates)
+                    
+                    # Handle resource upload if selected
+                    if success and new_status == STATUS_COMPLETED and upload_resource and 'uploaded_file' in locals() and uploaded_file:
+                        # Create directory structure for this resource
+                        resource_path = get_file_path(
+                            selected_request.university, 
+                            selected_request.semester, 
+                            selected_request.course
+                        )
+                        category_path = resource_path / resource_category
+                        create_directory_if_not_exists(category_path)
+                        
+                        # Save the uploaded file
+                        file_path = category_path / uploaded_file.name
+                        with open(file_path, "wb") as f:
+                            f.write(uploaded_file.getbuffer())
+                        
+                        # Update admin notes to include file info
+                        file_info = f"\n\nUploaded resource: {uploaded_file.name} (in {resource_category})"
+                        update_request(request_id, {"admin_notes": admin_notes + file_info})
+                        
+                        st.success(f"Request updated and resource uploaded successfully!")
+                    elif success:
                         st.success("Request updated successfully!")
-                        st.experimental_rerun()
                     else:
                         st.error("Failed to update request.")
+                    
+                    st.experimental_rerun()
                 
                 if delete_submitted:
                     if delete_request(request_id):
@@ -602,6 +1125,43 @@ def request_analytics():
             st.plotly_chart(fig, use_container_width=True)
         else:
             st.info("No priority data available.")
+    
+    # Add more charts
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.subheader("Requests by Resource Type")
+        
+        if stats["by_type"]:
+            sorted_types = sorted(stats["by_type"].items(), key=lambda x: x[1], reverse=True)
+            types = [x[0] for x in sorted_types]
+            counts = [x[1] for x in sorted_types]
+            
+            fig = px.bar(
+                x=types,
+                y=counts,
+                title="Most Requested Resource Types"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No resource type data available.")
+    
+    with col2:
+        st.subheader("Requests by University")
+        
+        if stats["by_university"]:
+            sorted_unis = sorted(stats["by_university"].items(), key=lambda x: x[1], reverse=True)
+            unis = [x[0] for x in sorted_unis]
+            counts = [x[1] for x in sorted_unis]
+            
+            fig = px.bar(
+                x=unis,
+                y=counts,
+                title="Requests by University"
+            )
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("No university data available.")
 
 # Admin function to manage settings
 def manage_settings():
@@ -758,22 +1318,72 @@ def manage_settings():
                         else:
                             st.error("Course already exists")
 
+# Homepage content
+def show_homepage():
+    st.header("Welcome to Student Resource Hub")
+    
+    # Display a welcome message and instructions
+    st.markdown("""
+    The Student Resource Hub helps you find and request resources for your university courses. 
+    
+    **Features:**
+    - Find study materials for your courses
+    - Request missing resources
+    - Track your requests
+    - Share resources with your classmates
+    
+    Get started by using the navigation options on the left sidebar.
+    """)
+    
+    # Show some quick stats
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        stats = get_request_stats()
+        completed_count = stats["by_status"].get(STATUS_COMPLETED, 0)
+        st.metric("Resources Available", completed_count)
+    
+    with col2:
+        settings = st.session_state.settings
+        course_count = 0
+        for semester_courses in settings.get("courses", {}).values():
+            course_count += len(semester_courses)
+        st.metric("Courses Covered", course_count)
+    
+    with col3:
+        uni_count = len(settings.get("universities", []))
+        st.metric("Universities", uni_count)
+    
+    # Quick actions
+    st.subheader("Quick Actions")
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        if st.button("Find Resources", key="quick_find"):
+            st.session_state.current_page = "find_resources"
+            st.rerun()
+    
+    with col2:
+        if st.button("Request Resources", key="quick_request"):
+            st.session_state.current_page = "request_resources"
+            st.rerun()
+
 # Main app logic
-if st.session_state.admin_authenticated:
-    # Admin view
-    if admin_option == "Manage Requests":
-        manage_requests()
-    elif admin_option == "Request Analytics":
-        request_analytics()
-    elif admin_option == "Settings":
-        manage_settings()
-else:
-    # User view
-    if user_option == "Submit Resource Request":
-        show_request_form()
-    elif user_option == "My Requests":
-        show_my_requests()
+if st.session_state.current_page == "home":
+    show_homepage()
+elif st.session_state.current_page == "find_resources":
+    show_resources()
+elif st.session_state.current_page == "request_resources":
+    show_request_form()
+elif st.session_state.current_page == "my_requests":
+    show_my_requests()
+elif st.session_state.current_page == "admin_portal":
+    if st.session_state.is_admin:
+        admin_dashboard()
+    else:
+        st.warning("Please log in to access the admin portal.")
+        st.session_state.show_login = True
 
 # Footer
 st.markdown("---")
-st.markdown("© 2023 Student Resource Hub. All rights reserved.")
+st.markdown("© 2025 Student Resource Hub. All rights reserved.")
