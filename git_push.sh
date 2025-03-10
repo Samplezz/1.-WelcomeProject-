@@ -1,17 +1,12 @@
 #!/bin/bash
 
 # This script safely pushes code to GitHub
-# Usage: ./git_push.sh <github_username> <repo_name> <commit_message>
+# Usage: Just run ./git_push.sh (no arguments needed)
 
-# Check if all arguments are provided
-if [ $# -lt 3 ]; then
-    echo "Usage: ./git_push.sh <github_username> <repo_name> <commit_message>"
-    exit 1
-fi
-
-GITHUB_USERNAME="$1"
-REPO_NAME="$2"
-COMMIT_MESSAGE="$3"
+# Your GitHub information
+GITHUB_USERNAME="Samplezz"
+REPO_NAME="StudentResourceHub"
+COMMIT_MESSAGE="fixhub"
 
 # Add all files
 git add .
@@ -21,11 +16,11 @@ git commit -m "$COMMIT_MESSAGE"
 
 # Set the remote repository if it doesn't exist
 if ! git remote | grep -q "origin"; then
-    # Use environment variable for token, avoiding exposing it in command line
-    git remote add origin "https://${GITHUB_TOKEN}@github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
+    # Set remote using your GitHub information
+    git remote add origin "https://github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
 else
-    # Update existing remote with token
-    git remote set-url origin "https://${GITHUB_TOKEN}@github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
+    # Update existing remote
+    git remote set-url origin "https://github.com/${GITHUB_USERNAME}/${REPO_NAME}.git"
 fi
 
 # Push to GitHub
