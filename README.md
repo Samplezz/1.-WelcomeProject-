@@ -30,11 +30,4 @@ A comprehensive student resource management platform that enables seamless mater
 - `data/`: Directory containing application data (requests, settings)
 - `assets/`: Directory for storing uploaded resource files
 
-## Admin Access
 
-The admin panel is protected with a password. Default credentials:
-- Password: `LouayX2006@`
-
-## License
-
-This project is available under the MIT License.
