@@ -438,27 +438,27 @@ with st.sidebar:
     st.subheader("Navigation")
     nav_option = st.radio(
         "Select Option",
-        ["Home", "Find Resources", "Request Resources", "My Requests", "Admin Portal"]
+        ["Home", "Find Resources", "Request Resources", "My Requests", "Admin Portal"],
+        key="nav_radio"
     )
     
-    # Update current page based on navigation
-    if nav_option == "Home":
-        st.session_state.current_page = "home"
-        st.rerun()
-    elif nav_option == "Find Resources":
-        st.session_state.current_page = "find_resources"
-        st.rerun()
-    elif nav_option == "Request Resources":
-        st.session_state.current_page = "request_resources"
-        st.rerun()
-    elif nav_option == "My Requests":
-        st.session_state.current_page = "my_requests"
-        st.rerun()
-    elif nav_option == "Admin Portal":
-        if not st.session_state.is_admin:
-            st.session_state.show_login = True
-        st.session_state.current_page = "admin_portal"
-        st.rerun()
+    # Update current page based on navigation - without immediate reruns
+    if nav_option != st.session_state.get("previous_nav", None):
+        if nav_option == "Home":
+            st.session_state.current_page = "home"
+        elif nav_option == "Find Resources":
+            st.session_state.current_page = "find_resources"
+        elif nav_option == "Request Resources":
+            st.session_state.current_page = "request_resources"
+        elif nav_option == "My Requests":
+            st.session_state.current_page = "my_requests"
+        elif nav_option == "Admin Portal":
+            if not st.session_state.is_admin:
+                st.session_state.show_login = True
+            st.session_state.current_page = "admin_portal"
+        
+        # Only rerun if the page has changed
+        st.session_state.previous_nav = nav_option
     
     # Admin Login/Logout
     if st.session_state.is_admin:
@@ -469,24 +469,28 @@ with st.sidebar:
 
 # Admin Login Modal
 if st.session_state.get('show_login', False) and not st.session_state.is_admin:
-    st.subheader("Admin Login")
-    admin_password = st.text_input("Admin Password", type="password")
-    
-    col1, col2 = st.columns(2)
-    with col1:
-        if st.button("Login"):
+    with st.container():
+        st.subheader("Admin Login")
+        with st.form(key="admin_login_form"):
+            admin_password = st.text_input("Admin Password", type="password")
+            
+            col1, col2 = st.columns(2)
+            with col1:
+                login_button = st.form_submit_button("Login")
+            
+            with col2:
+                cancel_button = st.form_submit_button("Cancel")
+                
+        if login_button:
             if admin_password == ADMIN_PASSWORD:
                 st.session_state.is_admin = True
                 st.session_state.show_login = False
                 st.success("Logged in as admin!")
-                st.rerun()
             else:
                 st.error("Incorrect password!")
-    
-    with col2:
-        if st.button("Cancel"):
+                
+        if cancel_button:
             st.session_state.show_login = False
-            st.rerun()
 
 # Function to display resource listing
 def show_resources():
@@ -1369,20 +1373,26 @@ def show_homepage():
             st.session_state.current_page = "request_resources"
             st.rerun()
 
-# Main app logic
-if st.session_state.current_page == "home":
+# Main app logic - Show the selected page based on navigation state
+current_page = st.session_state.current_page  # Store in a variable to avoid multiple lookups
+
+if current_page == "home":
     show_homepage()
-elif st.session_state.current_page == "find_resources":
+elif current_page == "find_resources":
     show_resources()
-elif st.session_state.current_page == "request_resources":
+elif current_page == "request_resources":
     show_request_form()
-elif st.session_state.current_page == "my_requests":
+elif current_page == "my_requests":
     show_my_requests()
-elif st.session_state.current_page == "admin_portal":
+elif current_page == "admin_portal":
     if st.session_state.is_admin:
         admin_dashboard()
     else:
         st.warning("Please log in to access the admin portal.")
+        # Show a button to go back to home if not logged in
+        if st.button("Back to Home"):
+            st.session_state.current_page = "home"
+            st.rerun()
         st.session_state.show_login = True
 
 # Footer
