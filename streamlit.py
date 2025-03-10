@@ -444,16 +444,21 @@ with st.sidebar:
     # Update current page based on navigation
     if nav_option == "Home":
         st.session_state.current_page = "home"
+        st.rerun()
     elif nav_option == "Find Resources":
         st.session_state.current_page = "find_resources"
+        st.rerun()
     elif nav_option == "Request Resources":
         st.session_state.current_page = "request_resources"
+        st.rerun()
     elif nav_option == "My Requests":
         st.session_state.current_page = "my_requests"
+        st.rerun()
     elif nav_option == "Admin Portal":
         if not st.session_state.is_admin:
             st.session_state.show_login = True
         st.session_state.current_page = "admin_portal"
+        st.rerun()
     
     # Admin Login/Logout
     if st.session_state.is_admin:
@@ -464,17 +469,12 @@ with st.sidebar:
 
 # Admin Login Modal
 if st.session_state.get('show_login', False) and not st.session_state.is_admin:
-    with st.form("login_form"):
-        st.subheader("Admin Login")
-        admin_password = st.text_input("Password", type="password")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            submitted = st.form_submit_button("Login")
-        with col2:
-            cancel = st.form_submit_button("Cancel")
-        
-        if submitted:
+    st.subheader("Admin Login")
+    admin_password = st.text_input("Admin Password", type="password")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Login"):
             if admin_password == ADMIN_PASSWORD:
                 st.session_state.is_admin = True
                 st.session_state.show_login = False
@@ -482,8 +482,9 @@ if st.session_state.get('show_login', False) and not st.session_state.is_admin:
                 st.rerun()
             else:
                 st.error("Incorrect password!")
-        
-        if cancel:
+    
+    with col2:
+        if st.button("Cancel"):
             st.session_state.show_login = False
             st.rerun()
 
