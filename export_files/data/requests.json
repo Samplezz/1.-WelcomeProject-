@@ -1,0 +1,18 @@
+[
+    {
+        "university": "MIT",
+        "semester": "Fall 2023",
+        "course": "Computer Science 101",
+        "resource_type": "Exam",
+        "description": "i want it for college",
+        "name": "louay",
+        "email": "bom@gmail.com",
+        "priority": "Medium",
+        "status": "Pending",
+        "created_at": "2025-03-10T06:20:18.382954",
+        "updated_at": "2025-03-10T06:20:18.382954",
+        "request_id": "1741587618",
+        "admin_notes": "",
+        "anonymous": false
+    }
+]
