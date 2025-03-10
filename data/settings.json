@@ -1,0 +1,17 @@
+{
+    "universities": [
+        "Example University"
+    ],
+    "semesters": {
+        "Example University": [
+            "Semester 1",
+            "Semester 2"
+        ]
+    },
+    "courses": {
+        "Example University_Semester 1": [
+            "Introduction to Computer Science",
+            "Calculus I"
+        ]
+    }
+}
